@@ -1,5 +1,4 @@
 #!/usr/bin/env sh
-
 bin=$1
 shift
 
