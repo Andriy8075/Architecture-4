@@ -4,9 +4,11 @@ import (
 	"context"
 	"flag"
 	"fmt"
+	"hash/fnv"
 	"io"
 	"log"
 	"net/http"
+	"sync"
 	"time"
 
 	"github.com/roman-mazur/architecture-practice-4-template/httptools"
@@ -28,7 +30,59 @@ var (
 		"server2:8080",
 		"server3:8080",
 	}
+	healthyServers []string
+	serversMutex   sync.RWMutex
 )
+
+func hashString(s string) uint32 {
+	h := fnv.New32a()
+	h.Write([]byte(s))
+	return h.Sum32()
+}
+
+func getHealthyServers() []string {
+	serversMutex.RLock()
+	defer serversMutex.RUnlock()
+	return append([]string{}, healthyServers...)
+}
+
+func updateServerHealth(server string, isHealthy bool) {
+	serversMutex.Lock()
+	defer serversMutex.Unlock()
+
+	if isHealthy {
+		found := false
+		for _, s := range healthyServers {
+			if s == server {
+				found = true
+				break
+			}
+		}
+		if !found {
+			healthyServers = append(healthyServers, server)
+			log.Printf("Server %s added to healthy pool", server)
+		}
+	} else {
+		for i, s := range healthyServers {
+			if s == server {
+				healthyServers = append(healthyServers[:i], healthyServers[i+1:]...)
+				log.Printf("Server %s removed from healthy pool", server)
+				break
+			}
+		}
+	}
+}
+
+func selectServerByClientHash(remoteAddr string) (string, error) {
+	servers := getHealthyServers()
+	if len(servers) == 0 {
+		return "", fmt.Errorf("no healthy servers available")
+	}
+
+	hash := hashString(remoteAddr)
+	serverIndex := int(hash) % len(servers)
+	return servers[serverIndex], nil
+}
 
 func scheme() string {
 	if *https {
@@ -38,21 +92,28 @@ func scheme() string {
 }
 
 func health(dst string) bool {
-	ctx, _ := context.WithTimeout(context.Background(), timeout)
-	req, _ := http.NewRequestWithContext(ctx, "GET",
+	ctx, cancel := context.WithTimeout(context.Background(), timeout)
+	defer cancel()
+
+	req, err := http.NewRequestWithContext(ctx, "GET",
 		fmt.Sprintf("%s://%s/health", scheme(), dst), nil)
+	if err != nil {
+		return false
+	}
+
 	resp, err := http.DefaultClient.Do(req)
 	if err != nil {
 		return false
 	}
-	if resp.StatusCode != http.StatusOK {
-		return false
-	}
-	return true
+	defer resp.Body.Close()
+
+	return resp.StatusCode == http.StatusOK
 }
 
 func forward(dst string, rw http.ResponseWriter, r *http.Request) error {
-	ctx, _ := context.WithTimeout(r.Context(), timeout)
+	ctx, cancel := context.WithTimeout(r.Context(), timeout)
+	defer cancel()
+
 	fwdRequest := r.Clone(ctx)
 	fwdRequest.RequestURI = ""
 	fwdRequest.URL.Host = dst
@@ -60,46 +121,65 @@ func forward(dst string, rw http.ResponseWriter, r *http.Request) error {
 	fwdRequest.Host = dst
 
 	resp, err := http.DefaultClient.Do(fwdRequest)
-	if err == nil {
-		for k, values := range resp.Header {
-			for _, value := range values {
-				rw.Header().Add(k, value)
-			}
-		}
-		if *traceEnabled {
-			rw.Header().Set("lb-from", dst)
-		}
-		log.Println("fwd", resp.StatusCode, resp.Request.URL)
-		rw.WriteHeader(resp.StatusCode)
-		defer resp.Body.Close()
-		_, err := io.Copy(rw, resp.Body)
-		if err != nil {
-			log.Printf("Failed to write response: %s", err)
-		}
-		return nil
-	} else {
+	if err != nil {
 		log.Printf("Failed to get response from %s: %s", dst, err)
 		rw.WriteHeader(http.StatusServiceUnavailable)
 		return err
 	}
+
+	for k, values := range resp.Header {
+		for _, value := range values {
+			rw.Header().Add(k, value)
+		}
+	}
+	if *traceEnabled {
+		rw.Header().Set("lb-from", dst)
+	}
+	log.Println("fwd", resp.StatusCode, resp.Request.URL)
+	rw.WriteHeader(resp.StatusCode)
+	defer resp.Body.Close()
+
+	_, err = io.Copy(rw, resp.Body)
+	if err != nil {
+		log.Printf("Failed to write response: %s", err)
+		return err
+	}
+	return nil
 }
 
 func main() {
 	flag.Parse()
 
-	// TODO: Використовуйте дані про стан сервера, щоб підтримувати список тих серверів, яким можна відправляти запит.
+	for _, server := range serversPool {
+		if health(server) {
+			updateServerHealth(server, true)
+		}
+	}
+
 	for _, server := range serversPool {
 		server := server
 		go func() {
 			for range time.Tick(10 * time.Second) {
-				log.Println(server, "healthy:", health(server))
+				isHealthy := health(server)
+				log.Println(server, "healthy:", isHealthy)
+				updateServerHealth(server, isHealthy)
 			}
 		}()
 	}
 
 	frontend := httptools.CreateServer(*port, http.HandlerFunc(func(rw http.ResponseWriter, r *http.Request) {
-		// TODO: Реалізуйте свій алгоритм балансувальника.
-		forward(serversPool[0], rw, r)
+		clientAddr := r.RemoteAddr
+
+		server, err := selectServerByClientHash(clientAddr)
+		if err != nil {
+			log.Printf("Failed to select server: %s", err)
+			rw.WriteHeader(http.StatusServiceUnavailable)
+			return
+		}
+
+		if err := forward(server, rw, r); err != nil {
+			log.Printf("Failed to forward request: %s", err)
+		}
 	}))
 
 	log.Println("Starting load balancer...")
