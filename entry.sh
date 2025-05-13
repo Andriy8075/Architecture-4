@@ -1,10 +1,9 @@
-#!/usr/bin/env sh
-bin=$1
-shift
+#!/bin/bash
 
-if [ -z "$bin" ]; then
-  echo "binary is not defined"
-  exit 1
+# Додамо перевірку на наявність команди
+if [ ! -f "/opt/practice-4/$1" ]; then
+    echo "Error: Command /opt/practice-4/$1 not found!"
+    exit 127
 fi
 
-exec ./"$bin" $@
+exec "/opt/practice-4/$1" "${@:2}"
