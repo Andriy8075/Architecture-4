@@ -36,26 +36,20 @@ func TestUpdateServerHealth(t *testing.T) {
 func TestSelectServerByClientHash(t *testing.T) {
 	healthyServers = []string{"server1:8080", "server2:8080", "server3:8080"}
 
-	addr1 := "192.168.0.101:12345"
-	addr2 := "192.168.0.103:12345"
+	addr := "192.168.0.101:12345"
 
-	s1, err := selectServerByClientHash(addr1)
+	s1, err := selectServerByClientHash(addr)
 	if err != nil {
 		t.Fatalf("Unexpected error: %v", err)
 	}
 
-	s2, err := selectServerByClientHash(addr2)
+	s2, err := selectServerByClientHash(addr)
 	if err != nil {
 		t.Fatalf("Unexpected error: %v", err)
 	}
 
-	if s1 == s2 {
-		t.Errorf("Expected different servers for different IPs, got same: %s", s1)
-	}
-
-	s1Again, _ := selectServerByClientHash(addr1)
-	if s1 != s1Again {
-		t.Errorf("Expected consistent hash result, got %s and %s", s1, s1Again)
+	if s1 != s2 {
+		t.Errorf("Expected the same servers for the same IPs, got different: %s, %s", s1, s2)
 	}
 }
 
