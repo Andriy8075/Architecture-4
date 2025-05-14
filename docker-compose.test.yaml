@@ -1,8 +1,11 @@
 services:
-  test:
+  client1:
     build:
       dockerfile: Dockerfile.test
-    extra_hosts:
-      - "host.docker.internal:host-gateway"
-    environment:
-      - BASE_ADDRESS=http://host.docker.internal:8090
+    networks:
+      - servers
+  client2:
+    build:
+      dockerfile: Dockerfile.test
+    networks:
+      - servers

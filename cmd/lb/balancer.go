@@ -7,6 +7,7 @@ import (
 	"hash/fnv"
 	"io"
 	"log"
+	"net"
 	"net/http"
 	"sync"
 	"time"
@@ -145,15 +146,16 @@ func selectServerByClientHash(remoteAddr string) (string, error) {
 		return "", fmt.Errorf("no healthy servers available")
 	}
 
-	// Детальне логування для діагностики
-	log.Printf("Selecting server for client: %s (healthy servers: %v)", remoteAddr, servers)
+	// Extract IP from remoteAddr (could be "ip:port" or just "ip")
+	host, _, err := net.SplitHostPort(remoteAddr)
+	if err != nil {
+		// If it fails, assume remoteAddr is just an IP without port
+		host = remoteAddr
+	}
 
-	hash := hashString(remoteAddr)
+	hash := hashString(host)
 	serverIndex := int(hash) % len(servers)
-	selected := servers[serverIndex]
-
-	log.Printf("Selected server: %s (index: %d)", selected, serverIndex)
-	return selected, nil
+	return servers[serverIndex], nil
 }
 
 func main() {

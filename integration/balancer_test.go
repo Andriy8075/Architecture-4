@@ -1,9 +1,7 @@
 package integration
 
 import (
-	"context"
 	"fmt"
-	"net"
 	"net/http"
 	"os"
 	"testing"
@@ -34,9 +32,6 @@ func TestBalancer(t *testing.T) {
 		if err != nil {
 			t.Fatal(err)
 		}
-
-		// Імітуємо різних клієнтів через різні порти
-		req.RemoteAddr = fmt.Sprintf("192.168.1.%d:%d", i%3+1, 50000+i)
 
 		resp, err := client.Do(req)
 		if err != nil {
@@ -69,15 +64,15 @@ func TestClientConsistency(t *testing.T) {
 	// Створюємо окремий клієнт для тесту
 	client := &http.Client{
 		Timeout: 10 * time.Second,
-		Transport: &http.Transport{
-			DialContext: func(ctx context.Context, network, addr string) (net.Conn, error) {
-				// Фіксуємо локальний IP для всіх з'єднань
-				dialer := &net.Dialer{
-					LocalAddr: &net.TCPAddr{IP: net.ParseIP("192.168.1.100")},
-				}
-				return dialer.DialContext(ctx, network, addr)
-			},
-		},
+		//Transport: &http.Transport{
+		//	DialContext: func(ctx context.Context, network, addr string) (net.Conn, error) {
+		//		// Фіксуємо локальний IP для всіх з'єднань
+		//		dialer := &net.Dialer{
+		//			LocalAddr: &net.TCPAddr{IP: net.ParseIP("172.18.0.100")},
+		//		}
+		//		return dialer.DialContext(ctx, network, addr)
+		//	},
+		//},
 	}
 
 	var firstServer string
@@ -99,7 +94,7 @@ func TestClientConsistency(t *testing.T) {
 		if firstServer == "" {
 			firstServer = server
 		} else if server != firstServer {
-			t.Errorf("Expected same server (%s) for same client, got %s", firstServer, server)
+			t.Errorf("Expected same server (%s) for same client, got %s\n", firstServer, server)
 		}
 		t.Logf("Request %d: served by %s", i+1, server)
 	}
