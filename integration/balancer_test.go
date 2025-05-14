@@ -33,6 +33,9 @@ func TestBalancer(t *testing.T) {
 			t.Fatal(err)
 		}
 
+		// Імітуємо різних клієнтів через різні порти
+		req.RemoteAddr = fmt.Sprintf("192.168.1.%d:%d", i+1, 50000+i)
+
 		resp, err := client.Do(req)
 		if err != nil {
 			t.Fatalf("Request %d failed: %v", i+1, err)
@@ -55,7 +58,6 @@ func TestBalancer(t *testing.T) {
 		t.Logf("Success: requests distributed between %d servers: %v", len(servers), servers)
 	}
 }
-
 func TestClientConsistency(t *testing.T) {
 	if _, exists := os.LookupEnv("INTEGRATION_TEST"); !exists {
 		t.Skip("Integration test is not enabled")
