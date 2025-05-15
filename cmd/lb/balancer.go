@@ -101,7 +101,6 @@ func health(dst string) bool {
 }
 
 func forward(dst string, rw http.ResponseWriter, r *http.Request) error {
-	// Додамо логування для діагностики
 	log.Printf("Forwarding request from %s to %s", r.RemoteAddr, dst)
 
 	ctx, cancel := context.WithTimeout(r.Context(), timeout)
