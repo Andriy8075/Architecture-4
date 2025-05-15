@@ -22,4 +22,4 @@ jobs:
 
       - name: Build and run tests
         run: |
-          docker compose -f docker-compose.yaml -f docker-compose.test.yaml up --build --exit-code-from test_client
+          docker compose -f docker-compose.yaml -f docker-compose.test.yaml up --build --exit-code-from test

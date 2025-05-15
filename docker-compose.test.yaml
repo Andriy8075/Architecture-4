@@ -1,5 +1,5 @@
 services:
-  test_client:
+  test:
     build:
       dockerfile: Dockerfile.test
     networks:
