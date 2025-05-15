@@ -1,0 +1,13 @@
+FROM golang:1.21 AS builder
+
+WORKDIR /app
+COPY . .
+RUN go test -c -o collector-test ./integration
+
+FROM alpine:latest
+WORKDIR /app
+COPY --from=builder /app/collector-test .
+COPY --from=builder /app/integration /app/integration
+
+EXPOSE 8080
+ENTRYPOINT ["go", "test", "./collector-tests"]

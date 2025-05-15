@@ -7,6 +7,7 @@ import (
 	"hash/fnv"
 	"io"
 	"log"
+	"net"
 	"net/http"
 	"sync"
 	"time"
@@ -17,7 +18,7 @@ import (
 
 var (
 	port       = flag.Int("port", 8090, "load balancer port")
-	timeoutSec = flag.Int("timeout-sec", 3, "request timeout time in seconds")
+	timeoutSec = flag.Int("timeout-sec", 10, "request timeout time in seconds")
 	https      = flag.Bool("https", false, "whether backends support HTTPs")
 
 	traceEnabled = flag.Bool("trace", false, "whether to include tracing information into responses")
@@ -73,17 +74,6 @@ func updateServerHealth(server string, isHealthy bool) {
 	}
 }
 
-func selectServerByClientHash(remoteAddr string) (string, error) {
-	servers := getHealthyServers()
-	if len(servers) == 0 {
-		return "", fmt.Errorf("no healthy servers available")
-	}
-
-	hash := hashString(remoteAddr)
-	serverIndex := int(hash) % len(servers)
-	return servers[serverIndex], nil
-}
-
 func scheme() string {
 	if *https {
 		return "https"
@@ -111,6 +101,9 @@ func health(dst string) bool {
 }
 
 func forward(dst string, rw http.ResponseWriter, r *http.Request) error {
+	// Додамо логування для діагностики
+	log.Printf("Forwarding request from %s to %s", r.RemoteAddr, dst)
+
 	ctx, cancel := context.WithTimeout(r.Context(), timeout)
 	defer cancel()
 
@@ -145,6 +138,24 @@ func forward(dst string, rw http.ResponseWriter, r *http.Request) error {
 		return err
 	}
 	return nil
+}
+
+func selectServerByClientHash(remoteAddr string) (string, error) {
+	servers := getHealthyServers()
+	if len(servers) == 0 {
+		return "", fmt.Errorf("no healthy servers available")
+	}
+
+	// Extract IP from remoteAddr (could be "ip:port" or just "ip")
+	host, _, err := net.SplitHostPort(remoteAddr)
+	if err != nil {
+		// If it fails, assume remoteAddr is just an IP without port
+		host = remoteAddr
+	}
+
+	hash := hashString(host)
+	serverIndex := int(hash) % len(servers)
+	return servers[serverIndex], nil
 }
 
 func main() {
