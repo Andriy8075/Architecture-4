@@ -19,5 +19,6 @@ jobs:
 
       - name: Build and run tests
         run: |
-          docker compose -f docker-compose.yaml -f docker-compose.test.yaml up --build --exit-code-from test --abort-on-container-exit
-          docker compose -f docker-compose.yaml -f docker-compose.test.yaml down
+          docker compose -f docker-compose.yaml -f docker-compose.test.yaml up --build --exit-code-from test
+          docker compose -f docker-compose.yaml -f docker-compose.test.yaml down --remove-orphans --timeout 1
+          docker system prune -f
