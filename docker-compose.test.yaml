@@ -1,10 +1,5 @@
 services:
-  client1:
-    build:
-      dockerfile: Dockerfile.test
-    networks:
-      - servers
-  client2:
+  test_client:
     build:
       dockerfile: Dockerfile.test
     networks:
